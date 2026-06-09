@@ -1,0 +1,42 @@
+{
+  "Juice": {
+    "products": {
+      "Apple Juice":  { "code": "P1", "space_per_unit": 0.0033 },
+      "Orange Juice": { "code": "P2", "space_per_unit": 0.0033 },
+      "Melon Juice":  { "code": "P3", "space_per_unit": 0.0033 }
+    },
+    "valid_order_quantities": [1000, 3000, 5000, 8000, 12000, 20000, 30000, 40000, 50000, 60000, 80000, 100000, 120000]
+  },
+  "Mask": {
+    "products": {
+      "Dust Mask":     { "code": "P1", "space_per_unit": 0.0133 },
+      "Surgical Mask": { "code": "P2", "space_per_unit": 0.0083 },
+      "KN95":          { "code": "P3", "space_per_unit": 0.012 }
+    },
+    "valid_order_quantities": [1000, 3000, 5000, 8000, 12000, 20000, 30000, 40000, 50000, 60000, 80000, 100000, 120000]
+  },
+  "Car": {
+    "products": {
+      "Sedan": { "code": "P1", "space_per_unit": 18.5 },
+      "SUV":   { "code": "P2", "space_per_unit": 23.2 },
+      "Truck": { "code": "P3", "space_per_unit": 28 }
+    },
+    "valid_order_quantities": [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 40, 50]
+  },
+  "Coffee": {
+    "products": {
+      "Americano":        { "code": "P1", "space_per_unit": 0.005 },
+      "Hot Chocolate":    { "code": "P2", "space_per_unit": 0.005 },
+      "Bubble Milk Tea":  { "code": "P3", "space_per_unit": 0.005 }
+    },
+    "valid_order_quantities": [1000, 3000, 5000, 8000, 12000, 20000, 30000, 40000, 50000, 60000, 80000, 100000, 120000]
+  },
+  "Electronics": {
+    "products": {
+      "Laptop":            { "code": "P1", "space_per_unit": 0.31 },
+      "Smartphone":        { "code": "P2", "space_per_unit": 0.012 },
+      "Witchtendo Switch": { "code": "P3", "space_per_unit": 0.024 }
+    },
+    "valid_order_quantities": [100, 300, 500, 800, 1200, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000]
+  }
+}

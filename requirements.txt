@@ -1,0 +1,6 @@
+# Runtime dependencies
+playwright>=1.40
+
+# Dev / test (install with: pip install -r requirements.txt)
+pytest>=8.0
+ruff>=0.5
