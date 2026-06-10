@@ -1,0 +1,20 @@
+{
+  "Indonesia": {
+    "Balikpapan": "11",
+    "Jakarta": "12",
+    "Denpasar": "13",
+    "Medan": "14",
+    "Palembang": "15",
+    "Makassar": "16",
+    "Surabaya": "17"
+  },
+  "China": {
+    "Guangzhou": "11",
+    "Beijing": "12",
+    "Chengdu": "13",
+    "Wuhan": "14",
+    "Zhuhai": "15",
+    "Dongguan": "16",
+    "Shanghai": "17"
+  }
+}

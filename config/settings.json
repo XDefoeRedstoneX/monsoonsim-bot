@@ -1,0 +1,12 @@
+{
+  "browser_url": "http://127.0.0.1:9222",
+  "site_fragments": ["monsoonsim.com"],
+  "default_vendor": "VFG2",
+  "default_product_set": "Juice",
+  "default_location_set": "Indonesia",
+  "fill_level_options": [100, 120, 140, 150, 160],
+  "default_fill_level": 100,
+  "max_retries": 3,
+  "rate_limit_wait_seconds": 1.5,
+  "next_day_timeout_seconds": 45
+}
