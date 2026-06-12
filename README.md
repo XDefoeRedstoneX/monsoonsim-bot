@@ -189,6 +189,25 @@ ruff check .  # lint
 The pure-logic tests (`tests/`) need no browser. Live, in-game verification of
 the selectors is tracked as a manual checklist in **[TESTING.md](TESTING.md)**.
 
+### Network-capture harness (research tool)
+
+The buttons the bot clicks are a thin shell over a server command API
+(`cmd=BUY_FG`, `cmd=SRV_INCOMING`, …). To explore whether future versions could
+talk to that API directly instead of driving the UI, the repo includes a
+read-only capture tool:
+
+```bash
+python -m monsoon_bot.capture            # records xhr/fetch + cmd= requests
+python -m monsoon_bot.capture --all      # records everything on the domain
+```
+
+Attach it to your debug-mode Chrome, perform **one** action in the game by hand
+(e.g. place a retail order), then Ctrl+C. It writes a `.jsonl` of the requests
+to `captures/` (gitignored) and prints a per-command summary. `Cookie` /
+`Authorization` headers are redacted automatically, but captures can still
+contain game-state data — review before sharing. The tool only observes; it
+never sends anything.
+
 ---
 
 ## 🗺️ Roadmap
@@ -196,6 +215,8 @@ the selectors is tracked as a manual checklist in **[TESTING.md](TESTING.md)**.
 - [ ] Add screenshots / demo GIF
 - [ ] More modules (Procurement, Finance) as automation targets
 - [ ] Configurable replenishment strategies beyond the 60/40 split
+- [ ] Direct command-API replay (researched via the capture harness) as an
+      alternative to UI clicking
 - [ ] Headless / scheduled runs
 
 ---
