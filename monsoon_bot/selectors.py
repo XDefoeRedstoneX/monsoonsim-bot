@@ -26,24 +26,41 @@ FACEBOX_SUBMIT = "#facebox #submit_button"
 RETAIL_KPI_TITLES = "#RTL .kpi_title"
 
 
+def _xpath_literal(value: str) -> str:
+    """Quote ``value`` as a safe XPath string literal.
+
+    XPath 1.0 has no escape sequences, so a value containing a single quote
+    would break a naive ``'...'`` literal. This returns a plain quoted string
+    when possible and falls back to ``concat(...)`` when both quote types are
+    present.
+    """
+    if "'" not in value:
+        return f"'{value}'"
+    if '"' not in value:
+        return f'"{value}"'
+    parts = value.split("'")
+    return "concat(" + ", \"'\", ".join(f"'{p}'" for p in parts) + ")"
+
+
 def retail_space_xpath(location_name: str) -> str:
     return (
-        f"xpath=//div[@id='RTL']//div[contains(., '{location_name}')]"
+        f"xpath=//div[@id='RTL']//div[contains(., {_xpath_literal(location_name)})]"
         f"/following-sibling::li[contains(., 'Space utilization')]//div"
     )
 
 
 def retail_stock_xpath(location_name: str, product_name: str) -> str:
     return (
-        f"xpath=//div[@id='RTL']//div[contains(@class, 'kpi_title') and contains(., '{location_name}')]"
-        f"/following-sibling::li[contains(., '{product_name}')]/span[@class='right']"
+        f"xpath=//div[@id='RTL']//div[contains(@class, 'kpi_title') "
+        f"and contains(., {_xpath_literal(location_name)})]"
+        f"/following-sibling::li[contains(., {_xpath_literal(product_name)})]/span[@class='right']"
     )
 
 
 def vendor_buy_xpath(vendor_name: str) -> str:
     return (
         f"xpath=//div[contains(@class, 'vendor-box') and "
-        f".//div[contains(text(), '{vendor_name}')]]//a[contains(@href, 'BUY_FG')]"
+        f".//div[contains(text(), {_xpath_literal(vendor_name)})]]//a[contains(@href, 'BUY_FG')]"
     )
 
 

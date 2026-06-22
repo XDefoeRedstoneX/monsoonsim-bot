@@ -13,7 +13,7 @@ from tkinter import scrolledtext, ttk
 
 from . import config
 from .async_tk import create_event_loop, pump_tk
-from .driver import MonsoonDriver, connect_to_game
+from .driver import ActionResult, MonsoonDriver, connect_to_game
 from .presets import PresetStore
 
 
@@ -46,8 +46,13 @@ class App(tk.Tk):
 
         # --- Window ---
         self.title("MonsoonSim AI Controller")
-        self.geometry("760x840")
-        self.minsize(640, 640)  # resizable: works on small / HiDPI screens
+        self.minsize(560, 560)
+        # Clamp the initial size to the screen so the window never opens larger
+        # than the display (matters on small laptops and scaled HiDPI desktops).
+        want_w, want_h = 760, 840
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        self.geometry(f"{min(want_w, screen_w - 40)}x{min(want_h, screen_h - 80)}")
 
         self._build_ui()
         self._refresh_priority_widgets()
@@ -105,6 +110,10 @@ class App(tk.Tk):
         log_frame.pack(fill="both", expand=True, padx=10, pady=10)
         self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, height=10)
         self.log_area.pack(fill="both", expand=True)
+        # Configure colour tags once; log_message just applies them per line.
+        for tag, fg in (("red", "red"), ("green", "green"), ("blue", "blue"),
+                        ("orange", "#E69138"), ("purple", "#800080")):
+            self.log_area.tag_config(tag, foreground=fg)
         self.log_area.config(state="disabled")
 
     def _bind_combobox(self, parent, var, handler):
@@ -338,11 +347,19 @@ class App(tk.Tk):
         try:
             while True:
                 day = await self.driver.get_current_day()
-                self.log_message(f"--- Starting Day {day['current']} ---", "purple")
+                # Detect the end BEFORE waiting, so the final day exits cleanly
+                # instead of timing out in wait_for_next_day.
+                if day["current"] >= day["total"]:
+                    self.log_message("GAME OVER", "green")
+                    break
+
+                current = day["current"]
+                self.log_message(f"--- Starting Day {current} ---", "purple")
 
                 if mode in ("service", "full"):
                     result = await self.driver.handle_service_requests()
-                    self.log_message(f"Service Check: {result}", "blue")
+                    self.log_message(f"Service Check: {result.message}",
+                                     "blue" if result.ok else "red")
 
                 if mode in ("retail", "full"):
                     locations = self.location_dropdown["values"]
@@ -350,16 +367,26 @@ class App(tk.Tk):
                         self.log_message(f"AUTO-STOP ({mode}): No locations fetched.", "red")
                         break
                     target = self.fill_percentage_var.get()
+                    failures = 0
                     for location in locations:
                         prioritized = self.presets.get(self._preset_key(location))
                         result = await self.driver.procure_for_retail_location(
                             location, prioritized, target)
-                        self.log_message(f"Replenish ({location}): {result}")
+                        self.log_message(f"Replenish ({location}): {result.message}",
+                                         "black" if result.ok else "red")
+                        if not result.ok:
+                            failures += 1
+                    # Every location failing means a real misconfiguration
+                    # (e.g. wrong location map); stop rather than spam each day.
+                    if failures == len(locations):
+                        self.log_message(
+                            f"AUTO-STOP ({mode}): all {failures} locations failed.", "red")
+                        break
 
-                day_info = await self.driver.wait_for_next_day(day["current"])
-                if day_info["current"] >= day_info["total"]:
-                    self.log_message("GAME OVER", "green")
-                    break
+                # Re-read the day: the in-game clock may have advanced while we
+                # worked, in which case we should not wait again.
+                if (await self.driver.get_current_day())["current"] == current:
+                    await self.driver.wait_for_next_day(current)
         except asyncio.CancelledError:
             self.log_message(f"Automation loop ({mode}) stopped by user.", "orange")
         except Exception as exc:
@@ -413,7 +440,9 @@ class App(tk.Tk):
             return
         try:
             result = await coro
-            if result:
+            if isinstance(result, ActionResult):
+                self.log_message(result.message, "green" if result.ok else "red")
+            elif result:
                 self.log_message(f"SUCCESS: {result}", "green")
         except Exception as exc:
             self.log_message(f"ERROR: {exc}", "red")
@@ -423,9 +452,6 @@ class App(tk.Tk):
         ts = datetime.now().strftime("%H:%M:%S")
         self.log_area.config(state="normal")
         self.log_area.insert(tk.END, f"[{ts}] {msg}\n")
-        for tag, fg in (("red", "red"), ("green", "green"), ("blue", "blue"),
-                        ("orange", "#E69138"), ("purple", "#800080")):
-            self.log_area.tag_config(tag, foreground=fg)
         self.log_area.tag_add(color, "end-1c linestart", "end-1c lineend")
         self.log_area.see(tk.END)
         self.log_area.config(state="disabled")

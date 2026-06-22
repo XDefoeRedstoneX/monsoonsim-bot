@@ -38,6 +38,11 @@ touches `driver.py` or `selectors.py`.
 ## Service / HR
 - [ ] **Auto-Handle First Service Request** opens a request and assigns mandays
 - [ ] With no pending requests, it reports "No new service requests found"
+- [ ] **Manday mapping** — verify staff land on the *correct* category tabs
+      (Marketing / Franchise / Technical). The code currently assumes the
+      scraped mandays align positionally with those three tabs; if a request
+      ever shows only some categories, capture the dialog DOM (via
+      `python -m monsoon_bot.capture`) so the mapping can be made label-based.
 
 ## Automation loops
 - [ ] **Start Retail Loop** processes every fetched location, then waits for the next day

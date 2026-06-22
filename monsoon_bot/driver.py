@@ -21,6 +21,23 @@ from .products import ProductSet
 DEFAULT_TIMEOUT_MS = 5000
 
 
+@dataclass
+class ActionResult:
+    """Outcome of an automation action.
+
+    Distinguishes success from failure structurally so callers branch on
+    ``ok`` instead of guessing from the message text. ``ok`` is True for both
+    "did the work" and benign "nothing to do" outcomes; it is False only for
+    genuine failures (skips due to misconfiguration, errors, exhausted retries).
+    """
+    ok: bool
+    message: str
+
+    def __bool__(self) -> bool:  # truthiness reflects success, not "has message"
+        return self.ok
+
+
+
 # --- Connection ---------------------------------------------------------------
 @dataclass
 class GameConnection:
@@ -116,8 +133,10 @@ class MonsoonDriver:
     async def _check_for_rate_limit(self) -> bool:
         """True if the game's 'Slow down, you click too fast' notice is showing."""
         try:
-            content = await self.page.evaluate("() => document.body.textContent")
-            return "Slow down, you click too fast" in (content or "")
+            # Done in-page so we ship back a bool, not the whole DOM text.
+            return bool(await self.page.evaluate(
+                "() => document.body.innerText.includes('Slow down, you click too fast')"
+            ))
         except Exception:
             return False
 
@@ -166,7 +185,7 @@ class MonsoonDriver:
     }
     """
 
-    async def handle_service_requests(self) -> str:
+    async def handle_service_requests(self) -> ActionResult:
         """Open the first incoming service request and auto-assign mandays."""
         max_retries = int(self.settings.get("max_retries", 3))
         wait_s = float(self.settings.get("rate_limit_wait_seconds", 1.5))
@@ -178,7 +197,7 @@ class MonsoonDriver:
                     await self._click(S.SERVICE_INCOMING_MENU)
                     await asyncio.sleep(1)
                 except Exception:
-                    return "Service module not found or not enabled. Skipping."
+                    return ActionResult(True, "Service module not found or not enabled. Skipping.")
 
                 try:
                     link = await self._find(S.SERVICE_REQUEST_LINK, timeout=2000)
@@ -186,7 +205,7 @@ class MonsoonDriver:
                     await self.page.wait_for_selector(S.FACEBOX_SUBMIT, state="visible",
                                                       timeout=self.timeout)
                 except Exception:
-                    return "No new service requests found."
+                    return ActionResult(True, "No new service requests found.")
 
                 await self.page.evaluate(self._SERVICE_HELPERS_JS)
 
@@ -201,6 +220,11 @@ class MonsoonDriver:
                     }"""
                 )
 
+                # NOTE: this assumes the scraped mandays array lines up
+                # positionally with these three tabs. That holds when all three
+                # categories are always present in order; if the game ever omits
+                # or reorders a category this will misassign. Needs a live-DOM
+                # capture to map mandays to tabs robustly (tracked in TESTING.md).
                 tab_names = ["Marketing Srv", "Franchise Srv", "Technical Srv"]
                 for idx, tab_name in enumerate(tab_names):
                     if idx < len(mandays) and mandays[idx] > 0:
@@ -213,15 +237,15 @@ class MonsoonDriver:
                 await asyncio.sleep(0.5)
                 await self._click(S.FACEBOX_SUBMIT)
                 await self.page.wait_for_selector(S.FACEBOX, state="hidden", timeout=self.timeout)
-                return f"Service request handled (mandays: {mandays or 'none'})."
+                return ActionResult(True, f"Service request handled (mandays: {mandays or 'none'}).")
 
             except Exception as exc:
                 if await self._check_for_rate_limit():
                     await asyncio.sleep(wait_s)
                     continue
-                return f"Service request failed: {exc}"
+                return ActionResult(False, f"Service request failed: {exc}")
 
-        return f"Service request failed after {max_retries} attempts."
+        return ActionResult(False, f"Service request failed after {max_retries} attempts.")
 
     # --- retail module ---
     async def get_retail_space_info(self, location_name: str) -> dict[str, int]:
@@ -260,7 +284,7 @@ class MonsoonDriver:
 
     async def procure_for_retail_location(self, location_name: str, prioritized: list[str],
                                           target_fill_percentage: float = 100,
-                                          vendor_name: str | None = None) -> str:
+                                          vendor_name: str | None = None) -> ActionResult:
         """Calculate and actually place a replenishment order, with retries."""
         vendor_name = vendor_name or self.settings.get("default_vendor", "VFG2")
         max_retries = int(self.settings.get("max_retries", 3))
@@ -271,14 +295,14 @@ class MonsoonDriver:
                 orders = await self.calculate_replenish_order(
                     location_name, prioritized, target_fill_percentage)
                 if not orders:
-                    return "Analysis complete. No order needed to meet targets."
+                    return ActionResult(True, "Analysis complete. No order needed to meet targets.")
 
                 location_id = self.location_map.get(location_name)
                 if not location_id:
-                    return (
+                    return ActionResult(False, (
                         f"SKIPPED {location_name}: not found in the "
                         f"'{self.location_set_name}' location map. Check Global Settings."
-                    )
+                    ))
 
                 await self._click(S.RETAIL_MODULE_BOX)
                 await self._click(S.RETAIL_VENDOR_MENU)
@@ -297,15 +321,16 @@ class MonsoonDriver:
                 await self.page.wait_for_selector(S.FACEBOX, state="hidden", timeout=self.timeout)
 
                 summary = ", ".join(f"{qty} of {prod}" for prod, qty in orders.items())
-                return f"Successfully ordered: {summary} for {location_name}."
+                return ActionResult(True, f"Successfully ordered: {summary} for {location_name}.")
 
             except Exception as exc:
                 if await self._check_for_rate_limit():
                     await asyncio.sleep(wait_s)
                     continue
-                return f"SKIPPED {location_name}: could not process replenishment. Reason: {exc}"
+                return ActionResult(
+                    False, f"SKIPPED {location_name}: could not process replenishment. Reason: {exc}")
 
-        return f"SKIPPED {location_name}: failed after {max_retries} attempts."
+        return ActionResult(False, f"SKIPPED {location_name}: failed after {max_retries} attempts.")
 
     # --- diagnostics ---
     async def self_test(self) -> list[tuple[str, bool, str]]:
