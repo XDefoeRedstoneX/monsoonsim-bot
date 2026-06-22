@@ -43,7 +43,3 @@ class PresetStore:
     def set(self, location: str, priorities: list[str]) -> None:
         self._data[location] = list(priorities)
         self.save()
-
-    def clear(self) -> None:
-        self._data = {}
-        self.save()

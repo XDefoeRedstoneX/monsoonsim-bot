@@ -36,13 +36,14 @@ class App(tk.Tk):
         # --- Runtime state ---
         self.connection = None
         self.driver: MonsoonDriver | None = None
-        self.retail_task = None
-        self.service_task = None
-        self.full_task = None
+        # One automation task slot per mode ("retail" / "service" / "full").
+        self.tasks: dict[str, asyncio.Task | None] = {
+            "retail": None, "service": None, "full": None}
 
         self.priority_vars: dict[str, tk.BooleanVar] = {}
         self.priority_checkboxes: list[ttk.Checkbutton] = []
         self.calc_vars: list[tk.StringVar] = []
+        self.calc_labels: list[ttk.Label] = []
 
         # --- Window ---
         self.title("MonsoonSim AI Controller")
@@ -56,6 +57,16 @@ class App(tk.Tk):
 
         self._build_ui()
         self._refresh_priority_widgets()
+
+        # Single source of truth for each automation mode's widgets + labels.
+        self.mode_ui = {
+            "retail": {"button": self.retail_auto_button, "status": self.retail_auto_status,
+                       "start": "Start Retail Loop", "stop": "Stop Retail Loop"},
+            "service": {"button": self.service_auto_button, "status": self.service_auto_status,
+                        "start": "Start Service Loop", "stop": "Stop Service Loop"},
+            "full": {"button": self.full_auto_button, "status": self.full_auto_status,
+                     "start": "Start Full Automation", "stop": "Stop Full Automation"},
+        }
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self) -> None:
@@ -78,10 +89,10 @@ class App(tk.Tk):
 
         ttk.Label(global_frame, text="Product Set:").pack(side="left", padx=5)
         self.product_set_var = tk.StringVar(value=self.active_product_set.name)
-        ttk.Combobox(global_frame, textvariable=self.product_set_var,
-                     values=list(self.product_sets.keys()), state="readonly", width=11
-                     ).pack(side="left", padx=5)
-        self._bind_combobox(global_frame, self.product_set_var, self.handle_product_set_change)
+        ps_combo = ttk.Combobox(global_frame, textvariable=self.product_set_var,
+                                values=list(self.product_sets.keys()), state="readonly", width=11)
+        ps_combo.pack(side="left", padx=5)
+        ps_combo.bind("<<ComboboxSelected>>", self.handle_product_set_change)
 
         ttk.Label(global_frame, text="Location Set:").pack(side="left", padx=5)
         self.location_set_var = tk.StringVar(value=next(
@@ -115,12 +126,6 @@ class App(tk.Tk):
                         ("orange", "#E69138"), ("purple", "#800080")):
             self.log_area.tag_config(tag, foreground=fg)
         self.log_area.config(state="disabled")
-
-    def _bind_combobox(self, parent, var, handler):
-        # The product-set combobox needs its widget to bind the event.
-        for child in parent.winfo_children():
-            if isinstance(child, ttk.Combobox) and child.cget("textvariable") == str(var):
-                child.bind("<<ComboboxSelected>>", handler)
 
     def _setup_retail_tab(self, tab):
         tab.columnconfigure(1, weight=1)
@@ -196,11 +201,10 @@ class App(tk.Tk):
     # ------------------------------------------------- dynamic priority widgets
     def _refresh_priority_widgets(self):
         """Rebuild the priority checkboxes and calc labels for the active set."""
-        for child in self.priority_frame.winfo_children():
-            child.destroy()
-        for child in self.calc_frame.winfo_children():
-            if int(child.grid_info().get("column", 0)) == 1:
-                child.destroy()
+        for chk in self.priority_checkboxes:
+            chk.destroy()
+        for label in self.calc_labels:
+            label.destroy()
 
         self.priority_vars = {}
         self.priority_checkboxes = []
@@ -213,11 +217,13 @@ class App(tk.Tk):
             self.priority_checkboxes.append(chk)
 
         self.calc_vars = []
+        self.calc_labels = []
         for i, name in enumerate(self.active_product_set.names):
             var = tk.StringVar(value=f"{name}: ---")
-            ttk.Label(self.calc_frame, textvariable=var, font=("Segoe UI", 9, "bold")
-                      ).grid(row=i, column=1, sticky="w", padx=10)
+            label = ttk.Label(self.calc_frame, textvariable=var, font=("Segoe UI", 9, "bold"))
+            label.grid(row=i, column=1, sticky="w", padx=10)
             self.calc_vars.append(var)
+            self.calc_labels.append(label)
 
     # ------------------------------------------------------------- presets
     def _preset_key(self, location: str) -> str:
@@ -314,36 +320,23 @@ class App(tk.Tk):
 
     # ------------------------------------------------------------- automation
     def toggle_automation(self, mode):
-        cfg = {
-            "retail": ("retail_task", self.retail_auto_button, self.retail_auto_status,
-                       "Start Retail Loop", "Stop Retail Loop"),
-            "service": ("service_task", self.service_auto_button, self.service_auto_status,
-                        "Start Service Loop", "Stop Service Loop"),
-            "full": ("full_task", self.full_auto_button, self.full_auto_status,
-                     "Start Full Automation", "Stop Full Automation"),
-        }[mode]
-        attr, button, label, start_text, stop_text = cfg
-        task = getattr(self, attr)
+        ui = self.mode_ui[mode]
+        task = self.tasks[mode]
 
         if task and not task.done():
             task.cancel()
-            button.config(text=start_text)
-            label.config(text="Status: STOPPING...", foreground="orange")
+            ui["button"].config(text=ui["start"])
+            ui["status"].config(text="Status: STOPPING...", foreground="orange")
         else:
             if not self.driver:
                 self.log_message("ERROR: Cannot start automation, not connected.", "red")
                 return
-            button.config(text=stop_text)
-            label.config(text="Status: RUNNING", foreground="green")
-            setattr(self, attr, self.loop.create_task(self.run_automation_loop(mode)))
+            ui["button"].config(text=ui["stop"])
+            ui["status"].config(text="Status: RUNNING", foreground="green")
+            self.tasks[mode] = self.loop.create_task(self.run_automation_loop(mode))
 
     async def run_automation_loop(self, mode):
-        cfg = {
-            "retail": (self.retail_auto_button, self.retail_auto_status, "Start Retail Loop"),
-            "service": (self.service_auto_button, self.service_auto_status, "Start Service Loop"),
-            "full": (self.full_auto_button, self.full_auto_status, "Start Full Automation"),
-        }[mode]
-        button, label, start_text = cfg
+        ui = self.mode_ui[mode]
         try:
             while True:
                 day = await self.driver.get_current_day()
@@ -393,9 +386,9 @@ class App(tk.Tk):
             self.log_message(f"AUTOMATION ERROR ({mode}): {exc}", "red")
         finally:
             self.log_message(f"Automation loop ({mode}) terminated.", "blue")
-            button.config(text=start_text)
-            label.config(text="Status: IDLE", foreground="blue")
-            setattr(self, f"{mode}_task", None)
+            ui["button"].config(text=ui["start"])
+            ui["status"].config(text="Status: IDLE", foreground="blue")
+            self.tasks[mode] = None
 
     # ------------------------------------------------------------- connection
     def schedule_connect(self):
@@ -473,8 +466,7 @@ def main():
     app = App(loop)
 
     def on_closing():
-        for attr in ("retail_task", "service_task", "full_task"):
-            task = getattr(app, attr, None)
+        for task in app.tasks.values():
             if task:
                 task.cancel()
         if app.connection:

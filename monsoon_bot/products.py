@@ -28,6 +28,7 @@ class ProductSet:
         self.name = name
         self.products = products
         self.valid_order_quantities = valid_order_quantities
+        self._by_name = {p.name: p for p in products}
 
     @classmethod
     def from_config(cls, name: str, data: dict) -> ProductSet:
@@ -42,13 +43,9 @@ class ProductSet:
         return [p.name for p in self.products]
 
     def space_of(self, product_name: str) -> float:
-        for p in self.products:
-            if p.name == product_name:
-                return p.space_per_unit
-        return 0.0
+        product = self._by_name.get(product_name)
+        return product.space_per_unit if product else 0.0
 
     def code_of(self, product_name: str) -> str | None:
-        for p in self.products:
-            if p.name == product_name:
-                return p.code
-        return None
+        product = self._by_name.get(product_name)
+        return product.code if product else None
